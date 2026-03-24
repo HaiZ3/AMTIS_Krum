@@ -14,8 +14,6 @@ namespace BankingCompetition.Services
 {
     public class TransactionService
     {
-        private readonly HttpClient _client;
-
         private Dictionary<string, List<Transaction>> _transactionsByCard = new();
         private Dictionary<string, List<Transaction>> _transactionsByClient = new();
         private List<TransactionResult> _allTransactionsResults = new();
@@ -51,8 +49,8 @@ namespace BankingCompetition.Services
                     //Get all the transactions by card for the day
                     List<Transaction> transactionsByCardForTheDay = _transactionsByCard[transaction.card_id]
                         .Where(x =>
-                        x.timestamp > x.timestamp.Date
-                        && x.timestamp < x.timestamp.Date.AddDays(1))
+                        x.timestamp >= transaction.timestamp.Date 
+                        && x.timestamp < transaction.timestamp.Date.AddDays(1))
                         .ToList();
 
                     decimal sumForTheDayByCard = transactionsByCardForTheDay.Sum(x => x.amount);
@@ -113,11 +111,11 @@ namespace BankingCompetition.Services
                     //Get all the transactions by client for the week
                     List<Transaction> transactionsByClientForTheDay = _transactionsByClient[transaction.client_id]
                         .Where(x =>
-                        x.timestamp > x.timestamp.Date
-                        && x.timestamp < x.timestamp.Date.AddDays(1))
+                        x.timestamp >= transaction.timestamp.Date
+                        && x.timestamp < transaction.timestamp.Date.AddDays(1))
                         .ToList();
 
-                    decimal sumForTheDayByClient = transactionsByCardForTheDay.Sum(x => x.amount);
+                    decimal sumForTheDayByClient = transactionsByClientForTheDay.Sum(x => x.amount);
 
                     //Check if the client is over the daily limit
                     if(sumForTheDayByClient + transaction.amount > SessionInfo.spendingLimits.dailyClientLimit)
@@ -160,6 +158,10 @@ namespace BankingCompetition.Services
                     result.status = "approved";
                     _allTransactionsResults.Add(result);
                 }
+                else
+                {
+
+                }
             }
             return _allTransactionsResults;
         }
@@ -187,7 +189,7 @@ namespace BankingCompetition.Services
             request.Headers.Add("Results-Hash", resultsHash);
             request.Content = content;
 
-            var response = await _client.SendAsync(request);
+            var response = await Values.client.SendAsync(request);
             return response.IsSuccessStatusCode;
         }
     }
