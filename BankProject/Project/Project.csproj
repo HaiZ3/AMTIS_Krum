@@ -8,11 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <Compile Remove="Limits\**" />
+    <EmbeddedResource Remove="Limits\**" />
+    <None Remove="Limits\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Limits\" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
 </Project>

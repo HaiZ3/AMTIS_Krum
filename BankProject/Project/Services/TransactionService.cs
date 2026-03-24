@@ -1,6 +1,8 @@
 ﻿using BankingCompetition.Models;
 using BankingCompetition.Utils;
+using Project.Constants;
 using Project.Models;
+using Project.Models.SessionConstraints;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
@@ -15,57 +17,163 @@ namespace BankingCompetition.Services
         private readonly HttpClient _client;
 
         private Dictionary<string, List<Transaction>> _transactionsByCard = new();
-        private Dictionary<string, List<Transaction>> _transactionsByUser = new();
-
-
-        private decimal StandardCardDailyLimit;
-        private decimal StandardCardWeeklyLimit;
-        private decimal PremiumCardDailyLimit;
-        private decimal PremiumCardWeeklyLimit;
-        private decimal UserDailyLimit;
-        private decimal UserWeeklyLimit;
-        private int MaxTransactionsPer10Seconds;
-        private decimal BankFeePercent;
-
-        public TransactionService(
-            HttpClient client
-            ,decimal StandardCardDailyLimit
-            ,decimal StandardCardWeeklyLimit
-            ,decimal PremiumCardDailyLimit
-            ,decimal PremiumCardWeeklyLimit
-            ,decimal UserDailyLimit
-            ,decimal UserWeeklyLimit
-            ,int MaxTransactionsPer10Seconds
-            ,decimal BankFeePercent)
+        private Dictionary<string, List<Transaction>> _transactionsByClient = new();
+        private List<TransactionResult> _allTransactionsResults = new();
+        private SessionInfo SessionInfo { get; }
+        public TransactionService(SessionInfo sessionInfo)
         {
-            _client = client;
-            this.StandardCardDailyLimit = StandardCardDailyLimit;
-            this.StandardCardWeeklyLimit = StandardCardWeeklyLimit;
-            this.PremiumCardDailyLimit = PremiumCardDailyLimit;
-            this.PremiumCardWeeklyLimit = PremiumCardWeeklyLimit;
-            this.UserDailyLimit = UserDailyLimit;
-            this.UserWeeklyLimit = UserWeeklyLimit;
-            this.MaxTransactionsPer10Seconds = MaxTransactionsPer10Seconds;
-            this.BankFeePercent = BankFeePercent;
+            SessionInfo = sessionInfo;
         }
 
-        public List<TransactionResult> ProcessTransactions(List<Transaction> transactions)
+        public async Task<List<TransactionResult>> ProcessTransactions(Transaction[] transactions)
         {
-            var results = new List<TransactionResult>();
-
-            foreach (Transaction currentTransaction in transactions)
+            foreach (Transaction transaction in transactions)
             {
-                if(currentTransaction.type == "authorization")
+                TransactionResult result = new TransactionResult();
+                result.transaction_id = transaction.transaction_id;
+                if(transaction.amount < 0)
                 {
-                    if (_transactionsByCard.ContainsKey(currentTransaction.card_id) == false)
+                    result.status = "declined";
+                    _allTransactionsResults.Add(result);
+                    continue;
+                }
+                if (transaction.type == "authorization")
+                {
+                    if (_transactionsByCard.ContainsKey(transaction.card_id) == false)
                     {
-                        _transactionsByCard.Add(currentTransaction.card_id, new List<Transaction>());
+                        _transactionsByCard.Add(transaction.card_id, new List<Transaction>() { });
+                    }
+                    if (_transactionsByClient.ContainsKey(transaction.client_id) == false)
+                    {
+                        _transactionsByClient.Add(transaction.client_id, new List<Transaction>() { });
                     }
 
+                    //Get all the transactions by card for the day
+                    List<Transaction> transactionsByCardForTheDay = _transactionsByCard[transaction.card_id]
+                        .Where(x =>
+                        x.timestamp > x.timestamp.Date
+                        && x.timestamp < x.timestamp.Date.AddDays(1))
+                        .ToList();
+
+                    decimal sumForTheDayByCard = transactionsByCardForTheDay.Sum(x => x.amount);
+                   
+                    //Check for the type of card
+                    if (transaction.card_type == "standard")
+                    {
+                        //Check if we are over the limit(Standard)
+                        if (sumForTheDayByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.standard.dailyLimit)
+                        {
+                            result.status = "declined";
+                            _allTransactionsResults.Add(result);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        //Check if we are over the limit(Premium)
+                        if (sumForTheDayByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.premium.dailyLimit)
+                        {
+                            result.status = "declined";
+                            _allTransactionsResults.Add(result);
+                            continue;
+                        }
+                    }
+
+                    DateTime transactionDate = transaction.timestamp.Date;
+                    //Get all the transactions by card for the week
+                    List<Transaction> transactionsByCardForTheWeek = _transactionsByCard[transaction.card_id]
+                        .Where(x => 
+                        x.timestamp >= transactionDate.Date.AddDays(-(int)(transactionDate.DayOfWeek + 6) % 7))
+                        .ToList();
+
+                    decimal sumForTheWeekByCard = transactionsByCardForTheWeek.Sum(x => x.amount);
+
+                    //Check for the type of card
+                    if (transaction.card_type == "standard")
+                    {
+                        //Check if we are over the limit(Standard)
+                        if (sumForTheWeekByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.standard.weeklyLimit)
+                        {
+                            result.status = "declined";
+                            _allTransactionsResults.Add(result);
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        //Check if we are over the limit(Premium)
+                        if(sumForTheWeekByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.premium.weeklyLimit)
+                        {
+                            result.status = "declined";
+                            _allTransactionsResults.Add(result);
+                            continue;
+                        }
+                    }
+
+                    //Get all the transactions by client for the week
+                    List<Transaction> transactionsByClientForTheDay = _transactionsByClient[transaction.client_id]
+                        .Where(x =>
+                        x.timestamp > x.timestamp.Date
+                        && x.timestamp < x.timestamp.Date.AddDays(1))
+                        .ToList();
+
+                    decimal sumForTheDayByClient = transactionsByCardForTheDay.Sum(x => x.amount);
+
+                    //Check if the client is over the daily limit
+                    if(sumForTheDayByClient + transaction.amount > SessionInfo.spendingLimits.dailyClientLimit)
+                    {
+                        result.status = "declined";
+                        _allTransactionsResults.Add(result);
+                        continue;
+                    }
+
+                    List<Transaction> transactionsByClientForTheWeek = _transactionsByClient[transaction.client_id]
+                        .Where(x =>
+                        x.timestamp >= transactionDate.Date.AddDays(-(int)(transactionDate.DayOfWeek + 6) % 7))
+                        .ToList();
+
+                    decimal sumForTheWeekByClient = transactionsByClientForTheWeek.Sum(x => x.amount);
+
+                    //Check if the client is over the weekly limit
+                    if (sumForTheWeekByClient + transaction.amount > SessionInfo.spendingLimits.weeklyClientLimit)
+                    {
+                        result.status = "declined";
+                        _allTransactionsResults.Add(result);
+                        continue;
+                    }
+
+                     int numberOfTransactionsIn10Seconds = _transactionsByClient[transaction.client_id]
+                        .Where(x => x.timestamp <= transaction.timestamp
+                        && x.timestamp >= transaction.timestamp.AddSeconds(-10))
+                        .Count();
+
+                    //Check if there were more transactions than the allowed amount
+                    if(numberOfTransactionsIn10Seconds == SessionInfo.spendingLimits.allowedTransactionsPer10s)
+                    {
+                        result.status = "declined";
+                        _allTransactionsResults.Add(result);
+                        continue;
+                    }
+
+                    _transactionsByCard[transaction.card_id].Add(transaction);
+                    _transactionsByClient[transaction.client_id].Add(transaction);
+                    result.status = "approved";
+                    _allTransactionsResults.Add(result);
                 }
             }
+            return _allTransactionsResults;
+        }
+        public async Task<TransactionBatch?> GetTransactionsForAudit(SessionInfo sessionInfo)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, Values.baseUrl + "transaction-batches");
+            request.Headers.Add("Session-Id", sessionInfo.sessionId);
+            request.Headers.Add("Competitor-Id", Values.competitorId);
 
-            return results;
+            var response = await Values.client.SendAsync(request);
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            TransactionBatch transactionsToAudit = JsonSerializer.Deserialize<TransactionBatch>(responseContent);
+            return transactionsToAudit;
         }
 
         public async Task<bool> SendBatchResultsAsync(string sessionId, string competitorId, string batchId, List<TransactionResult> results, string resultsHash)
