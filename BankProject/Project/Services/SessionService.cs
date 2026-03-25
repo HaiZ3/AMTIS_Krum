@@ -1,6 +1,6 @@
 ﻿using Project.Constants;
 using Project.Models.SessionConstraints;
-using Project.Services.PostRequests;
+using Project.Services.PostServices;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -27,7 +27,7 @@ namespace BankingCompetition.Services
 
             if (response.IsSuccessStatusCode)
             {
-                Console.WriteLine(responseContent);
+
             }
             else
             {

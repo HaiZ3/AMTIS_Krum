@@ -12,6 +12,11 @@ namespace Project.Constants
         public static readonly string competitorId = "ea04a325-4362-11f0-bc60-0242ac130003";
         public static readonly string gitSha = "01af148c021237b0bdd83f03623af514b1ee8669";
         public static readonly string sessionType = "test";
-        public static HttpClient client = new HttpClient();
+        public static readonly HttpClient client;
+        static Values()
+        {
+            client = new HttpClient();
+            client.BaseAddress = new Uri(baseUrl);
+        }
     }
 }

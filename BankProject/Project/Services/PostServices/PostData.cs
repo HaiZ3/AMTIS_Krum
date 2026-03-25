@@ -1,16 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static System.Net.Mime.MediaTypeNames;
 
-namespace Project.Services.PostRequests
+namespace Project.Services.PostServices
 {
     public class PostData
     {
-        private readonly HashSet<string> allowedSessions = new HashSet<string>{ "test", "sanity" , "stress", "survival" };
+        private readonly HashSet<string> allowedSessions = new HashSet<string> { "test", "sanity", "stress", "survival" };
         public PostData(string competitorId, string sessionType, string gitSha)
         {
             if (allowedSessions.Contains(competitorId))

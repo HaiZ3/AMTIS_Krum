@@ -6,6 +6,7 @@ using Project.Models.SessionConstraints;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Runtime.Intrinsics.Arm;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -17,21 +18,29 @@ namespace BankingCompetition.Services
         private Dictionary<string, List<Transaction>> _transactionsByCard = new();
         private Dictionary<string, List<Transaction>> _transactionsByClient = new();
         private List<TransactionResult> _allTransactionsResults = new();
-        private SessionInfo SessionInfo { get; }
-        public TransactionService(SessionInfo sessionInfo)
+        private readonly HttpClient _client;
+        private SessionInfo SessionInfo;
+
+        public List<Transaction> TransactionsByClient
+        {
+            //Get the list from the dictionary _transactionsByClient SelectMany is essential
+            get => _transactionsByClient.Values.SelectMany(x => x).ToList();
+        }
+        public TransactionService(SessionInfo sessionInfo,HttpClient client)
         {
             SessionInfo = sessionInfo;
+            this._client = client;
         }
 
-        public async Task<List<TransactionResult>> ProcessTransactions(Transaction[] transactions)
+        public List<TransactionResult> ProcessTransactions(Transaction[] transactions)
         {
             foreach (Transaction transaction in transactions)
             {
                 TransactionResult result = new TransactionResult();
                 result.transaction_id = transaction.transaction_id;
+                result.status = "declined";
                 if(transaction.amount < 0)
                 {
-                    result.status = "declined";
                     _allTransactionsResults.Add(result);
                     continue;
                 }
@@ -61,7 +70,6 @@ namespace BankingCompetition.Services
                         //Check if we are over the limit(Standard)
                         if (sumForTheDayByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.standard.dailyLimit)
                         {
-                            result.status = "declined";
                             _allTransactionsResults.Add(result);
                             continue;
                         }
@@ -71,7 +79,6 @@ namespace BankingCompetition.Services
                         //Check if we are over the limit(Premium)
                         if (sumForTheDayByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.premium.dailyLimit)
                         {
-                            result.status = "declined";
                             _allTransactionsResults.Add(result);
                             continue;
                         }
@@ -92,7 +99,6 @@ namespace BankingCompetition.Services
                         //Check if we are over the limit(Standard)
                         if (sumForTheWeekByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.standard.weeklyLimit)
                         {
-                            result.status = "declined";
                             _allTransactionsResults.Add(result);
                             continue;
                         }
@@ -102,7 +108,6 @@ namespace BankingCompetition.Services
                         //Check if we are over the limit(Premium)
                         if(sumForTheWeekByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.premium.weeklyLimit)
                         {
-                            result.status = "declined";
                             _allTransactionsResults.Add(result);
                             continue;
                         }
@@ -120,7 +125,6 @@ namespace BankingCompetition.Services
                     //Check if the client is over the daily limit
                     if(sumForTheDayByClient + transaction.amount > SessionInfo.spendingLimits.dailyClientLimit)
                     {
-                        result.status = "declined";
                         _allTransactionsResults.Add(result);
                         continue;
                     }
@@ -135,7 +139,6 @@ namespace BankingCompetition.Services
                     //Check if the client is over the weekly limit
                     if (sumForTheWeekByClient + transaction.amount > SessionInfo.spendingLimits.weeklyClientLimit)
                     {
-                        result.status = "declined";
                         _allTransactionsResults.Add(result);
                         continue;
                     }
@@ -148,7 +151,6 @@ namespace BankingCompetition.Services
                     //Check if there were more transactions than the allowed amount
                     if(numberOfTransactionsIn10Seconds == SessionInfo.spendingLimits.allowedTransactionsPer10s)
                     {
-                        result.status = "declined";
                         _allTransactionsResults.Add(result);
                         continue;
                     }
@@ -158,9 +160,30 @@ namespace BankingCompetition.Services
                     result.status = "approved";
                     _allTransactionsResults.Add(result);
                 }
-                else
+                else if(transaction.type == "refund")
                 {
-
+                    //Get the last transaction in the 7 days window as inclusive
+                    Transaction? lastTransactionForTheClientAndTheCard = _transactionsByClient[transaction.client_id]
+                        .Where(x => x.card_id == transaction.card_id)
+                        .Where(x => x.timestamp >= transaction.timestamp.AddDays(-7))
+                        .OrderByDescending(x => x.timestamp)
+                        .FirstOrDefault();
+                    //Check if a such transaction exists
+                    if(lastTransactionForTheClientAndTheCard is null)
+                    {
+                        _allTransactionsResults.Add(result);
+                        continue;
+                    }
+                    //Check if the amount is bigger than the original transaction amount
+                    if(transaction.amount > lastTransactionForTheClientAndTheCard.amount)
+                    {
+                        _allTransactionsResults.Add(result);
+                        continue;
+                    } 
+                    result.status = "approved";
+                    _transactionsByCard[transaction.card_id].Add(transaction);
+                    _transactionsByClient[transaction.client_id].Add(transaction);
+                    _allTransactionsResults.Add(result);
                 }
             }
             return _allTransactionsResults;
@@ -178,18 +201,19 @@ namespace BankingCompetition.Services
             return transactionsToAudit;
         }
 
-        public async Task<bool> SendBatchResultsAsync(string sessionId, string competitorId, string batchId, List<TransactionResult> results, string resultsHash)
+        public async Task<bool> SendBatchResultsAsync(string sessionId, string batchId, List<TransactionResult> results)
         {
             var json = JsonSerializer.Serialize(results);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var request = new HttpRequestMessage(HttpMethod.Patch, $"transaction-batches/{batchId}");
-            request.Headers.Add("Session-Id", sessionId);
-            request.Headers.Add("Competitor-Id", competitorId);
-            request.Headers.Add("Results-Hash", resultsHash);
+            string sha256 = SHA256.GenerateSha256Hash(json);
+            request.Headers.Add("Session-Id",sessionId);
+            request.Headers.Add("Competitor-Id",Values.competitorId);
+            request.Headers.Add("Results-Hash", sha256);
             request.Content = content;
 
-            var response = await Values.client.SendAsync(request);
+            var response = await _client.SendAsync(request);
             return response.IsSuccessStatusCode;
         }
     }

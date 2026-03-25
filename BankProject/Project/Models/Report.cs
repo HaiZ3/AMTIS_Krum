@@ -16,6 +16,6 @@ namespace Project.Models
         public int totalDeclinedCount { get; set; }
         public decimal totalDeclinedAmount { get; set; }
         public decimal totalEarningsAmount { get; set; }
-        public List<ClientReport> clients { get; set; }
+        public List<Client> clients { get; set; }
     }
 }

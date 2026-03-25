@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Project.Models
 {
-    public class ClientReport
+    public class Client
     {
         public string clientId { get; set; }
         public int totalApprovedCount { get; set; }
