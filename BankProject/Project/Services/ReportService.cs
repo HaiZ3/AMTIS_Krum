@@ -11,28 +11,26 @@ namespace BankingCompetition.Services
 {
     public class ReportService
     {
-        private readonly HttpClient _client;
         private readonly List<Transaction> _transactions;
 
-        public ReportService(HttpClient client, List<Transaction> transactions)
+        public ReportService(List<Transaction> transactions)
         {
-            _client = client;
             _transactions = transactions;
         }
 
 
-        public async Task<ReportConfiguration[]?> GetReportConfigurationAsync(string sessionId)
+        public async Task<List<ReportConfiguration>> GetReportConfigurationAsync(string sessionId)
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "report-configuration");
+            var request = new HttpRequestMessage(HttpMethod.Get,"report-configuration");
             request.Headers.Add("Session-Id", sessionId);
             request.Headers.Add("Competitor-Id", Values.competitorId);
 
-            var response = await Values.client.SendAsync(request);
+            HttpResponseMessage response = await Values.client.SendAsync(request);
             if (!response.IsSuccessStatusCode)
                 return null;
 
             var json = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<ReportConfiguration[]>(json);
+            return JsonSerializer.Deserialize<List<ReportConfiguration>>(json);
         }
 
         public List<Report> GenerateReports(ReportConfiguration config)
@@ -143,7 +141,7 @@ namespace BankingCompetition.Services
             request.Headers.Add("Competitor-Id", competitorId);
             request.Content = content;
 
-            var response = await _client.SendAsync(request);
+            var response = await Values.client.SendAsync(request);
             return response.IsSuccessStatusCode;
         }
     }

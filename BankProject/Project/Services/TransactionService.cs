@@ -3,13 +3,8 @@ using BankingCompetition.Utils;
 using Project.Constants;
 using Project.Models;
 using Project.Models.SessionConstraints;
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Runtime.Intrinsics.Arm;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace BankingCompetition.Services
 {
@@ -26,7 +21,7 @@ namespace BankingCompetition.Services
             //Get the list from the dictionary _transactionsByClient SelectMany is essential
             get => _transactionsByClient.Values.SelectMany(x => x).ToList();
         }
-        public TransactionService(SessionInfo sessionInfo,HttpClient client)
+        public TransactionService(SessionInfo sessionInfo, HttpClient client)
         {
             SessionInfo = sessionInfo;
             this._client = client;
@@ -34,36 +29,39 @@ namespace BankingCompetition.Services
 
         public List<TransactionResult> ProcessTransactions(Transaction[] transactions)
         {
+            //This thing made me lose my sanity for about 3 hours :D. Since I didn't understand that with each batch we don't need to send the results from the previous ones
+            List<TransactionResult> currentTransactionsForTheBatch = new List<TransactionResult>();
             foreach (Transaction transaction in transactions)
             {
                 TransactionResult result = new TransactionResult();
                 result.transaction_id = transaction.transaction_id;
                 result.status = "declined";
-                if(transaction.amount < 0)
+                if (_transactionsByCard.ContainsKey(transaction.card_id) == false)
+                {
+                    _transactionsByCard.Add(transaction.card_id, new List<Transaction>() { });
+                }
+                if (_transactionsByClient.ContainsKey(transaction.client_id) == false)
+                {
+                    _transactionsByClient.Add(transaction.client_id, new List<Transaction>() { });
+                }
+                if (transaction.amount < 0)
                 {
                     _allTransactionsResults.Add(result);
+                    currentTransactionsForTheBatch.Add(result);
                     continue;
                 }
                 if (transaction.type == "authorization")
                 {
-                    if (_transactionsByCard.ContainsKey(transaction.card_id) == false)
-                    {
-                        _transactionsByCard.Add(transaction.card_id, new List<Transaction>() { });
-                    }
-                    if (_transactionsByClient.ContainsKey(transaction.client_id) == false)
-                    {
-                        _transactionsByClient.Add(transaction.client_id, new List<Transaction>() { });
-                    }
 
                     //Get all the transactions by card for the day
                     List<Transaction> transactionsByCardForTheDay = _transactionsByCard[transaction.card_id]
                         .Where(x =>
-                        x.timestamp >= transaction.timestamp.Date 
+                        x.timestamp >= transaction.timestamp.Date
                         && x.timestamp < transaction.timestamp.Date.AddDays(1))
                         .ToList();
 
                     decimal sumForTheDayByCard = transactionsByCardForTheDay.Sum(x => x.amount);
-                   
+
                     //Check for the type of card
                     if (transaction.card_type == "standard")
                     {
@@ -71,6 +69,7 @@ namespace BankingCompetition.Services
                         if (sumForTheDayByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.standard.dailyLimit)
                         {
                             _allTransactionsResults.Add(result);
+                            currentTransactionsForTheBatch.Add(result);
                             continue;
                         }
                     }
@@ -80,6 +79,7 @@ namespace BankingCompetition.Services
                         if (sumForTheDayByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.premium.dailyLimit)
                         {
                             _allTransactionsResults.Add(result);
+                            currentTransactionsForTheBatch.Add(result);
                             continue;
                         }
                     }
@@ -87,7 +87,7 @@ namespace BankingCompetition.Services
                     DateTime transactionDate = transaction.timestamp.Date;
                     //Get all the transactions by card for the week
                     List<Transaction> transactionsByCardForTheWeek = _transactionsByCard[transaction.card_id]
-                        .Where(x => 
+                        .Where(x =>
                         x.timestamp >= transactionDate.Date.AddDays(-(int)(transactionDate.DayOfWeek + 6) % 7))
                         .ToList();
 
@@ -100,15 +100,17 @@ namespace BankingCompetition.Services
                         if (sumForTheWeekByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.standard.weeklyLimit)
                         {
                             _allTransactionsResults.Add(result);
+                            currentTransactionsForTheBatch.Add(result);
                             continue;
                         }
                     }
                     else
                     {
                         //Check if we are over the limit(Premium)
-                        if(sumForTheWeekByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.premium.weeklyLimit)
+                        if (sumForTheWeekByCard + transaction.amount > SessionInfo.spendingLimits.cardLimits.premium.weeklyLimit)
                         {
                             _allTransactionsResults.Add(result);
+                            currentTransactionsForTheBatch.Add(result);
                             continue;
                         }
                     }
@@ -123,9 +125,10 @@ namespace BankingCompetition.Services
                     decimal sumForTheDayByClient = transactionsByClientForTheDay.Sum(x => x.amount);
 
                     //Check if the client is over the daily limit
-                    if(sumForTheDayByClient + transaction.amount > SessionInfo.spendingLimits.dailyClientLimit)
+                    if (sumForTheDayByClient + transaction.amount > SessionInfo.spendingLimits.dailyClientLimit)
                     {
                         _allTransactionsResults.Add(result);
+                        currentTransactionsForTheBatch.Add(result);
                         continue;
                     }
 
@@ -140,18 +143,20 @@ namespace BankingCompetition.Services
                     if (sumForTheWeekByClient + transaction.amount > SessionInfo.spendingLimits.weeklyClientLimit)
                     {
                         _allTransactionsResults.Add(result);
+                        currentTransactionsForTheBatch.Add(result);
                         continue;
                     }
 
-                     int numberOfTransactionsIn10Seconds = _transactionsByClient[transaction.client_id]
-                        .Where(x => x.timestamp <= transaction.timestamp
-                        && x.timestamp >= transaction.timestamp.AddSeconds(-10))
-                        .Count();
+                    int numberOfTransactionsIn10Seconds = _transactionsByClient[transaction.client_id]
+                       .Where(x => x.timestamp <= transaction.timestamp
+                       && x.timestamp >= transaction.timestamp.AddSeconds(-10))
+                       .Count();
 
                     //Check if there were more transactions than the allowed amount
-                    if(numberOfTransactionsIn10Seconds == SessionInfo.spendingLimits.allowedTransactionsPer10s)
+                    if (numberOfTransactionsIn10Seconds == SessionInfo.spendingLimits.allowedTransactionsPer10s)
                     {
                         _allTransactionsResults.Add(result);
+                        currentTransactionsForTheBatch.Add(result);
                         continue;
                     }
 
@@ -159,8 +164,9 @@ namespace BankingCompetition.Services
                     _transactionsByClient[transaction.client_id].Add(transaction);
                     result.status = "approved";
                     _allTransactionsResults.Add(result);
+                    currentTransactionsForTheBatch.Add(result);
                 }
-                else if(transaction.type == "refund")
+                else if (transaction.type == "refund")
                 {
                     //Get the last transaction in the 7 days window as inclusive
                     Transaction? lastTransactionForTheClientAndTheCard = _transactionsByClient[transaction.client_id]
@@ -169,35 +175,46 @@ namespace BankingCompetition.Services
                         .OrderByDescending(x => x.timestamp)
                         .FirstOrDefault();
                     //Check if a such transaction exists
-                    if(lastTransactionForTheClientAndTheCard is null)
+                    if (lastTransactionForTheClientAndTheCard is null)
                     {
                         _allTransactionsResults.Add(result);
+                        currentTransactionsForTheBatch.Add(result);
                         continue;
                     }
                     //Check if the amount is bigger than the original transaction amount
-                    if(transaction.amount > lastTransactionForTheClientAndTheCard.amount)
+                    if (transaction.amount > lastTransactionForTheClientAndTheCard.amount)
                     {
                         _allTransactionsResults.Add(result);
+                        currentTransactionsForTheBatch.Add(result);
                         continue;
-                    } 
+                    }
                     result.status = "approved";
                     _transactionsByCard[transaction.card_id].Add(transaction);
                     _transactionsByClient[transaction.client_id].Add(transaction);
                     _allTransactionsResults.Add(result);
+                    currentTransactionsForTheBatch.Add(result);
                 }
             }
-            return _allTransactionsResults;
+            return currentTransactionsForTheBatch;
         }
-        public async Task<TransactionBatch?> GetTransactionsForAudit(SessionInfo sessionInfo)
+        public async Task<TransactionBatch?> GetTransactionsForAudit(string sessionId)
         {
             var request = new HttpRequestMessage(HttpMethod.Get, Values.baseUrl + "transaction-batches");
-            request.Headers.Add("Session-Id", sessionInfo.sessionId);
+            request.Headers.Add("Session-Id", sessionId);
             request.Headers.Add("Competitor-Id", Values.competitorId);
 
             var response = await Values.client.SendAsync(request);
             var responseContent = await response.Content.ReadAsStringAsync();
 
-            TransactionBatch transactionsToAudit = JsonSerializer.Deserialize<TransactionBatch>(responseContent);
+            TransactionBatch? transactionsToAudit = new TransactionBatch();
+            try
+            {
+                transactionsToAudit = JsonSerializer.Deserialize<TransactionBatch>(responseContent);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
             return transactionsToAudit;
         }
 
@@ -208,12 +225,20 @@ namespace BankingCompetition.Services
 
             var request = new HttpRequestMessage(HttpMethod.Patch, $"transaction-batches/{batchId}");
             string sha256 = SHA256.GenerateSha256Hash(json);
-            request.Headers.Add("Session-Id",sessionId);
-            request.Headers.Add("Competitor-Id",Values.competitorId);
+            request.Headers.Add("Session-Id", sessionId);
+            request.Headers.Add("Competitor-Id", Values.competitorId);
             request.Headers.Add("Results-Hash", sha256);
             request.Content = content;
 
-            var response = await _client.SendAsync(request);
+            var response = await Values.client.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("Batch send");
+            }
+            else
+            {
+                Console.WriteLine("Batch error");
+            }
             return response.IsSuccessStatusCode;
         }
     }

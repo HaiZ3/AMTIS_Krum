@@ -10,7 +10,7 @@ namespace Project.Constants
     {
         public static readonly string baseUrl = "https://competition-engine-production.up.railway.app/";
         public static readonly string competitorId = "ea04a325-4362-11f0-bc60-0242ac130003";
-        public static readonly string gitSha = "01af148c021237b0bdd83f03623af514b1ee8669";
+        public static readonly string gitSha = "d1c7f55adcc9b56a5bfb5cb860fba1678a1c4385";
         public static readonly string sessionType = "test";
         public static readonly HttpClient client;
         static Values()
