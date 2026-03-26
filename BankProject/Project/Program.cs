@@ -14,10 +14,11 @@ class Program
 
         //Initialize the transaction service and get the transactions to audit.
         TransactionService transactionService = new TransactionService(sessionInfo, Values.client);
+        //Process each transaction batch
         while (true)
         {
             TransactionBatch batch = await transactionService.GetTransactionsForAudit(sessionInfo.sessionId);
-
+            //Check if we have ran out of batches
             if (batch == null || batch.transactions == null || batch.transactions.Length == 0)
             {
                 Console.WriteLine("All Transactions are processed!");
@@ -30,10 +31,17 @@ class Program
 
         ReportService reportService = new ReportService(transactionService.TransactionsByClient);
         List<ReportConfiguration> reportConfiguration = await reportService.GetReportConfigurationAsync(sessionInfo.sessionId);
-        
-        if(reportConfiguration is null)
+
+        List<Report> reports = reportService.GenerateReports(reportConfiguration, sessionInfo.spendingLimits.interchangeFeePercentage);
+
+        bool reportStatus = await reportService.SendReportsAsync(sessionInfo.sessionId, Values.competitorId, reports);
+        if(reportStatus == true)
         {
-            Console.WriteLine("kur");
+            Console.WriteLine("Reports send successffully");
+        }
+        else
+        {
+            Console.WriteLine("Error when sending the reports");
         }
     }
 }

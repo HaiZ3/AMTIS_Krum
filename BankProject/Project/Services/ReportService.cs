@@ -1,17 +1,15 @@
 ﻿using BankingCompetition.Models;
 using Project.Constants;
 using Project.Models;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace BankingCompetition.Services
 {
     public class ReportService
     {
         private readonly List<Transaction> _transactions;
+        private readonly HttpClient client = new HttpClient();
 
         public ReportService(List<Transaction> transactions)
         {
@@ -21,7 +19,7 @@ namespace BankingCompetition.Services
 
         public async Task<List<ReportConfiguration>> GetReportConfigurationAsync(string sessionId)
         {
-            var request = new HttpRequestMessage(HttpMethod.Get,"report-configuration");
+            var request = new HttpRequestMessage(HttpMethod.Get, "report-configuration");
             request.Headers.Add("Session-Id", sessionId);
             request.Headers.Add("Competitor-Id", Values.competitorId);
 
@@ -30,118 +28,107 @@ namespace BankingCompetition.Services
                 return null;
 
             var json = await response.Content.ReadAsStringAsync();
-            return JsonSerializer.Deserialize<List<ReportConfiguration>>(json);
+            List<ReportConfiguration> reportConfigurations = JsonSerializer.Deserialize<List<ReportConfiguration>>(json);
+            return reportConfigurations;
         }
 
-        public List<Report> GenerateReports(ReportConfiguration config)
+        public List<Report> GenerateReports(List<ReportConfiguration> configs, decimal bankFee)
         {
-            return null;
-            //var reports = new List<Report>();
+            List<Report> reports = new List<Report>();
 
-            //foreach (var config in configs)
-            //{
-            //    var transactionsInPeriod = _transactions.FindAll(tx =>
-            //        tx.timestamp >= config.FromTimestamp &&
-            //        tx.timestamp <= config.ToTimestamp);
+            foreach (var config in configs)
+            {
+                Transaction[] validTransactions = _transactions
+                    .Where(x => x.timestamp >= config.FromTimestamp
+                    && x.timestamp < config.ToTimestamp)
+                    .ToArray();
+                Report report = new Report();
+                report.id = config.Id;
+                report.fromTime = config.FromTimestamp;
+                report.toTime = config.ToTimestamp;
+                report.totalApprovedCount = validTransactions
+                    .Where(x => x.status == "approved")
+                    .Count()
+                    .ToString();
 
-            //    if (config.ClientIds != null && config.ClientIds.Count > 0)
-            //    {
-            //        transactionsInPeriod = transactionsInPeriod.FindAll(tx =>config.ClientIds.Contains(tx.client_id));
-            //    }
+                decimal totalApprovedAmount = validTransactions
+                    .Where(x => x.status == "approved")
+                    .Sum(x => x.amount);
+                report.totalApprovedAmount = totalApprovedAmount.ToString("F2");
 
-            //    var groupedByClient = new Dictionary<string, List<Transaction>>();
-            //    foreach (var tx in transactionsInPeriod)
-            //    {
-            //        if (!groupedByClient.ContainsKey(tx.client_id))
-            //        {
-            //            groupedByClient[tx.client_id] = new List<Transaction>();
-            //        }
+                report.totalDeclinedCount = validTransactions
+                    .Where(x => x.status == "declined")
+                    .Count()
+                    .ToString();
 
-            //        groupedByClient[tx.client_id].Add(tx);
-            //    }
+                decimal totalDeclinedAmount = validTransactions
+                    .Where(x => x.status == "declined")
+                    .Sum(x => x.amount);
+                report.totalDeclinedAmount = totalDeclinedAmount.ToString("F2");
 
-            //    int totalApprovedCount = 0;
-            //    decimal totalApprovedAmount = 0m;
-            //    int totalDeclinedCount = 0;
-            //    decimal totalDeclinedAmount = 0m;
-            //    decimal totalEarningsAmount = 0m;
+                report.totalEarningsAmount = ((totalApprovedAmount - totalDeclinedAmount) * (bankFee / 100m)).ToString("F2");
+                if (config.ClientIds is not null)
+                {
+                    Client[] clients = new Client[config.ClientIds.Length];
+                    int i = 0;
+                    foreach (var currentClient in config.ClientIds)
+                    {
+                        Client client = new();
+                        Transaction[] transactionsForTheClient = validTransactions
+                            .Where(x => x.client_id == currentClient)
+                            .ToArray();
+                        client.clientId = currentClient;
+                        client.totalApprovedCount = transactionsForTheClient
+                            .Where(x => x.status == "approved")
+                            .Count();
 
-            //    var clientReports = new List<ClientReport>();
+                        decimal clientApprovedAmount = transactionsForTheClient
+                            .Where(x => x.status == "approved")
+                            .Sum(x => x.amount);
+                        client.totalApprovedAmount = clientApprovedAmount.ToString("F2");
 
-            //    foreach (var clientGroup in groupedByClient)
-            //    {
-            //        var clientId = clientGroup.Key;
-            //        var clientTransactions = clientGroup.Value;
+                        client.totalDeclinedCount = transactionsForTheClient
+                            .Where(x => x.status == "declined")
+                            .Count();
 
-            //        int approvedCount = 0;
-            //        decimal approvedAmount = 0m;
-            //        int declinedCount = 0;
-            //        decimal declinedAmount = 0m;
-            //        decimal earningsAmount = 0m;
+                        decimal clientDeclinedAmount = transactionsForTheClient
+                            .Where(x => x.status == "declined")
+                            .Sum (x => x.amount);
+                        client.totalDeclinedAmount = clientDeclinedAmount.ToString("F2");
 
-            //        foreach (var tx in clientTransactions)
-            //        {
-            //            string status = "approved";
+                        client.totalEarningsAmount = ((clientApprovedAmount - clientDeclinedAmount) * (bankFee / 100m)).ToString("F2");
+                        clients[i] = client;
+                        i++;
+                    }
+                    report.clients = clients;
+                }
+                else
+                {
+                    report.clients = Array.Empty<Client>();
+                }
+                reports.Add(report);
+            }
 
-            //            if (status == "approved")
-            //            {
-            //                approvedCount++;
-            //                approvedAmount += tx.amount;
-            //                earningsAmount += tx.amount * 0.003m; 
-            //            }
-            //            else if (status == "declined")
-            //            {
-            //                declinedCount++;
-            //                declinedAmount += tx.amount;
-            //            }
-            //        }
-
-            //        totalApprovedCount += approvedCount;
-            //        totalApprovedAmount += approvedAmount;
-            //        totalDeclinedCount += declinedCount;
-            //        totalDeclinedAmount += declinedAmount;
-            //        totalEarningsAmount += earningsAmount;
-
-            //        clientReports.Add(new ClientReport
-            //        {
-            //            clientId = clientId,
-            //            totalApprovedCount = approvedCount,
-            //            totalApprovedAmount = approvedAmount,
-            //            totalDecliendCount = declinedCount,
-            //            totalDeclinedAmount = declinedAmount,
-            //            totalEarningsAmount = earningsAmount
-            //        });
-            //    }
-
-            //    reports.Add(new Report
-            //    {
-            //        id = config.Id,
-            //        fromTime = config.FromTimestamp,
-            //        toTime = config.ToTimestamp,
-            //        totalApprovedCount = totalApprovedCount,
-            //        totalApprovedAmount = totalApprovedAmount,
-            //        totalDeclinedCount = totalDeclinedCount,
-            //        totalDeclinedAmount = totalDeclinedAmount,
-            //        totalEarningsAmount = totalEarningsAmount,
-            //        clients = clientReports
-            //    });
-            //}
-
-            //return reports;
+            return reports;
         }
 
 
         public async Task<bool> SendReportsAsync(string sessionId, string competitorId, List<Report> reports)
         {
             var json = JsonSerializer.Serialize(reports);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var request = new HttpRequestMessage(HttpMethod.Put, "reports");
+            var request = new HttpRequestMessage(HttpMethod.Put, Values.baseUrl + "reports");
             request.Headers.Add("Session-Id", sessionId);
             request.Headers.Add("Competitor-Id", competitorId);
             request.Content = content;
 
-            var response = await Values.client.SendAsync(request);
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine(response.StatusCode);
+                Console.WriteLine(await response.Content.ReadAsStringAsync());
+            }
             return response.IsSuccessStatusCode;
         }
     }

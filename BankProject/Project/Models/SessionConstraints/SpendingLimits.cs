@@ -12,7 +12,7 @@ namespace Project.Models.SessionConstraints
         public int dailyClientLimit { get; set; }
         public int weeklyClientLimit { get; set; }
         public int allowedTransactionsPer10s { get; set; }
-        public double interchangeFeePercentage { get; set; }
+        public decimal interchangeFeePercentage { get; set; }
         public CardLimits cardLimits { get; set; }
     }
 }

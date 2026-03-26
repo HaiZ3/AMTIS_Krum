@@ -2,20 +2,38 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace Project.Models
 {
     public class Report
     {
+        [JsonPropertyName("id")]
         public string id { get; set; }
+
+        [JsonPropertyName("from_timestamp")]
         public DateTime fromTime { get; set; }
+
+        [JsonPropertyName("to_timestamp")]
         public DateTime toTime { get; set; }
-        public int totalApprovedCount { get; set; }
-        public decimal totalApprovedAmount { get; set; }
-        public int totalDeclinedCount { get; set; }
-        public decimal totalDeclinedAmount { get; set; }
-        public decimal totalEarningsAmount { get; set; }
-        public List<Client> clients { get; set; }
+
+        [JsonPropertyName("total_approved_count")]
+        public string totalApprovedCount { get; set; }
+
+        [JsonPropertyName("total_approved_amount")]
+        public string totalApprovedAmount { get; set; }
+
+        [JsonPropertyName("total_declined_count")]
+        public string totalDeclinedCount { get; set; }
+
+        [JsonPropertyName("total_declined_amount")]
+        public string totalDeclinedAmount { get; set; }
+
+        [JsonPropertyName("total_earnings_amount")]
+        public string totalEarningsAmount { get; set; }
+
+        [JsonPropertyName("clients")]
+        public Client[]? clients { get; set; }
     }
 }

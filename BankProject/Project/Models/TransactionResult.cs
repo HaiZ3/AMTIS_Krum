@@ -1,4 +1,5 @@
-﻿using System;
+﻿using BankingCompetition.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,5 +11,10 @@ namespace Project.Models
     {
         public string transaction_id { get; set; }
         public string status { get; set; }
+        public TransactionResult(Transaction transaction)
+        {
+            this.transaction_id = transaction.transaction_id;
+            this.status = transaction.status;
+        }
     }
 }
