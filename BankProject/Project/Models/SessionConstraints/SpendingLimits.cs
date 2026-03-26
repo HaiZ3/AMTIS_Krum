@@ -9,8 +9,8 @@ namespace Project.Models.SessionConstraints
 {
     public class SpendingLimits
     {
-        public int dailyClientLimit { get; set; }
-        public int weeklyClientLimit { get; set; }
+        public decimal dailyClientLimit { get; set; }
+        public decimal weeklyClientLimit { get; set; }
         public int allowedTransactionsPer10s { get; set; }
         public decimal interchangeFeePercentage { get; set; }
         public CardLimits cardLimits { get; set; }

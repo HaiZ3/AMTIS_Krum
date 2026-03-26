@@ -1,6 +1,7 @@
 ﻿using BankingCompetition.Models;
 using Project.Constants;
 using Project.Models;
+using Project.Models.SessionConstraints;
 using System.Text;
 using System.Text.Json;
 
@@ -32,81 +33,53 @@ namespace BankingCompetition.Services
             return reportConfigurations;
         }
 
-        public List<Report> GenerateReports(List<ReportConfiguration> configs, decimal bankFee)
+        public List<Report> GenerateReports(List<ReportConfiguration> configs, decimal bankFee,SessionInfo sessionInfo)
         {
-            List<Report> reports = new List<Report>();
+            var reports = new List<Report>();
+            decimal feeRate = (sessionInfo.spendingLimits.interchangeFeePercentage / 100.0m);
 
             foreach (var config in configs)
             {
-                Transaction[] validTransactions = _transactions
-                    .Where(x => x.timestamp >= config.FromTimestamp
-                    && x.timestamp < config.ToTimestamp)
-                    .ToArray();
-                Report report = new Report();
-                report.id = config.Id;
-                report.fromTime = config.FromTimestamp;
-                report.toTime = config.ToTimestamp;
-                report.totalApprovedCount = validTransactions
-                    .Where(x => x.status == "approved")
-                    .Count()
-                    .ToString();
 
-                decimal totalApprovedAmount = validTransactions
-                    .Where(x => x.status == "approved")
-                    .Sum(x => x.amount);
-                report.totalApprovedAmount = totalApprovedAmount.ToString("F2");
+                List<Transaction> periodTxs = _transactions.Where(tx =>
+                    tx.timestamp >= config.FromTimestamp &&
+                    tx.timestamp <= config.ToTimestamp &&
+                    (config.ClientIds.Length == 0 || config.ClientIds.Contains(tx.client_id)) &&
+                    tx.type == "authorization"
+                ).ToList();
 
-                report.totalDeclinedCount = validTransactions
-                    .Where(x => x.status == "declined")
-                    .Count()
-                    .ToString();
+                List<Client> clientReports = new List<Client>();
 
-                decimal totalDeclinedAmount = validTransactions
-                    .Where(x => x.status == "declined")
-                    .Sum(x => x.amount);
-                report.totalDeclinedAmount = totalDeclinedAmount.ToString("F2");
+                var grouped = periodTxs.GroupBy(x => x.client_id);
 
-                report.totalEarningsAmount = ((totalApprovedAmount - totalDeclinedAmount) * (bankFee / 100m)).ToString("F2");
-                if (config.ClientIds is not null)
+                foreach (var group in grouped)
                 {
-                    Client[] clients = new Client[config.ClientIds.Length];
-                    int i = 0;
-                    foreach (var currentClient in config.ClientIds)
+                    var approved = group.Where(x => x.status == "approved").ToList();
+                    var declined = group.Where(x => x.status == "declined").ToList();
+
+                    clientReports.Add(new Client
                     {
-                        Client client = new();
-                        Transaction[] transactionsForTheClient = validTransactions
-                            .Where(x => x.client_id == currentClient)
-                            .ToArray();
-                        client.clientId = currentClient;
-                        client.totalApprovedCount = transactionsForTheClient
-                            .Where(x => x.status == "approved")
-                            .Count();
-
-                        decimal clientApprovedAmount = transactionsForTheClient
-                            .Where(x => x.status == "approved")
-                            .Sum(x => x.amount);
-                        client.totalApprovedAmount = clientApprovedAmount.ToString("F2");
-
-                        client.totalDeclinedCount = transactionsForTheClient
-                            .Where(x => x.status == "declined")
-                            .Count();
-
-                        decimal clientDeclinedAmount = transactionsForTheClient
-                            .Where(x => x.status == "declined")
-                            .Sum (x => x.amount);
-                        client.totalDeclinedAmount = clientDeclinedAmount.ToString("F2");
-
-                        client.totalEarningsAmount = ((clientApprovedAmount - clientDeclinedAmount) * (bankFee / 100m)).ToString("F2");
-                        clients[i] = client;
-                        i++;
-                    }
-                    report.clients = clients;
+                        clientId = group.Key,
+                        totalApprovedCount = approved.Count,
+                        totalApprovedAmount = Math.Round(approved.Sum(x => x.amount),2),
+                        totalDeclinedCount = declined.Count,
+                        totalDeclinedAmount = Math.Round(declined.Sum(x => x.amount),2),
+                        totalEarningsAmount = Math.Round(approved.Sum(x => x.amount) * feeRate, 2)
+                    });
                 }
-                else
+
+                reports.Add(new Report
                 {
-                    report.clients = Array.Empty<Client>();
-                }
-                reports.Add(report);
+                    id = config.Id,
+                    fromTime = config.FromTimestamp,
+                    toTime = config.ToTimestamp,
+                    totalApprovedCount = clientReports.Sum(x => x.totalApprovedCount),
+                    totalApprovedAmount = Math.Round(clientReports.Sum(x => x.totalApprovedAmount), 2),
+                    totalDeclinedCount = clientReports.Sum(x => x.totalDeclinedCount),
+                    totalDeclinedAmount = Math.Round(clientReports.Sum(x => x.totalDeclinedAmount), 2),
+                    totalEarningsAmount = Math.Round(clientReports.Sum(x => x.totalEarningsAmount) * feeRate,2),
+                    clients = clientReports
+                });
             }
 
             return reports;

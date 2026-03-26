@@ -16,15 +16,15 @@ namespace Project.Models
         public int totalApprovedCount { get; set; }
 
         [JsonPropertyName("total_approved_amount")]
-        public string totalApprovedAmount { get; set; }
+        public decimal totalApprovedAmount { get; set; }
 
         [JsonPropertyName("total_declined_count")]
         public int totalDeclinedCount { get; set; } 
 
         [JsonPropertyName("total_declined_amount")]
-        public string totalDeclinedAmount { get; set; }
+        public decimal totalDeclinedAmount { get; set; }
 
         [JsonPropertyName("total_earnings_amount")]
-        public string totalEarningsAmount { get; set; }
+        public decimal totalEarningsAmount { get; set; }
     }
 }

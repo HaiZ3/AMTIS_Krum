@@ -19,6 +19,6 @@ namespace Project.Models
         public DateTime ToTimestamp { get; set; }
 
         [JsonPropertyName("clientIds")]
-        public string[] ClientIds { get; set; }
+        public string[]? ClientIds { get; set; }
     }
 }

@@ -32,7 +32,7 @@ class Program
         ReportService reportService = new ReportService(transactionService.TransactionsByClient);
         List<ReportConfiguration> reportConfiguration = await reportService.GetReportConfigurationAsync(sessionInfo.sessionId);
 
-        List<Report> reports = reportService.GenerateReports(reportConfiguration, sessionInfo.spendingLimits.interchangeFeePercentage);
+        List<Report> reports = reportService.GenerateReports(reportConfiguration, sessionInfo.spendingLimits.interchangeFeePercentage,sessionInfo);
 
         bool reportStatus = await reportService.SendReportsAsync(sessionInfo.sessionId, Values.competitorId, reports);
         if(reportStatus == true)
