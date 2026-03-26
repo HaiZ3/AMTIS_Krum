@@ -47,6 +47,7 @@ namespace BankingCompetition.Services
                 }
                 if (transaction.amount < 0)
                 {
+                    transaction.amount = 0;
                     _allTransactions.Add(transaction);
                     transactionResult = new TransactionResult(transaction);
                     currentTransactionsForTheBatch.Add(transactionResult);

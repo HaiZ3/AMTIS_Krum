@@ -77,7 +77,7 @@ namespace BankingCompetition.Services
                     totalApprovedAmount = Math.Round(clientReports.Sum(x => x.totalApprovedAmount), 2),
                     totalDeclinedCount = clientReports.Sum(x => x.totalDeclinedCount),
                     totalDeclinedAmount = Math.Round(clientReports.Sum(x => x.totalDeclinedAmount), 2),
-                    totalEarningsAmount = Math.Round(clientReports.Sum(x => x.totalEarningsAmount) * feeRate,2),
+                    totalEarningsAmount = Math.Round(clientReports.Sum(x => x.totalEarningsAmount) * feeRate, 2),
                     clients = clientReports
                 });
             }
