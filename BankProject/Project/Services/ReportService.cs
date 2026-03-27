@@ -33,53 +33,77 @@ namespace BankingCompetition.Services
             return reportConfigurations;
         }
 
-        public List<Report> GenerateReports(List<ReportConfiguration> configs, decimal bankFee,SessionInfo sessionInfo)
+        public List<Report> GenerateReports(List<ReportConfiguration> configs, decimal bankFee)
         {
-            var reports = new List<Report>();
-            decimal feeRate = (sessionInfo.spendingLimits.interchangeFeePercentage / 100.0m);
-
+            List<Report> reports = new List<Report>();
             foreach (var config in configs)
             {
+                Transaction[] validTransactions = _transactions
+                    .Where(x => x.timestamp >= config.FromTimestamp
+                    && x.timestamp < config.ToTimestamp)
+                    .ToArray();
+                Report report = new Report();
+                report.id = config.Id;
+                report.fromTime = config.FromTimestamp;
+                report.toTime = config.ToTimestamp;
+                report.totalApprovedCount = validTransactions
+                    .Where(x => x.status == "approved")
+                    .Count();
 
-                List<Transaction> periodTxs = _transactions.Where(tx =>
-                    tx.timestamp >= config.FromTimestamp &&
-                    tx.timestamp <= config.ToTimestamp &&
-                    (config.ClientIds.Length == 0 || config.ClientIds.Contains(tx.client_id)) &&
-                    tx.type == "authorization"
-                ).ToList();
+                decimal totalApprovedAmount = validTransactions
+                    .Where(x => x.status == "approved")
+                    .Sum(x => x.amount);
 
-                List<Client> clientReports = new List<Client>();
+                report.totalDeclinedCount = validTransactions
+                    .Where(x => x.status == "declined")
+                    .Count();
 
-                var grouped = periodTxs.GroupBy(x => x.client_id);
+                decimal totalDeclinedAmount = validTransactions
+                    .Where(x => x.status == "declined")
+                    .Sum(x => x.amount);
+                report.totalDeclinedAmount = totalDeclinedAmount;
 
-                foreach (var group in grouped)
+                report.totalEarningsAmount = ((totalApprovedAmount - totalDeclinedAmount) * (bankFee / 100m));
+                if (config.ClientIds is not null)
                 {
-                    var approved = group.Where(x => x.status == "approved").ToList();
-                    var declined = group.Where(x => x.status == "declined").ToList();
-
-                    clientReports.Add(new Client
+                    Client[] clients = new Client[config.ClientIds.Length];
+                    int i = 0;
+                    foreach (var currentClient in config.ClientIds)
                     {
-                        clientId = group.Key,
-                        totalApprovedCount = approved.Count,
-                        totalApprovedAmount = Math.Round(approved.Sum(x => x.amount),2),
-                        totalDeclinedCount = declined.Count,
-                        totalDeclinedAmount = Math.Round(declined.Sum(x => x.amount),2),
-                        totalEarningsAmount = Math.Round(approved.Sum(x => x.amount) * feeRate, 2)
-                    });
-                }
+                        Client client = new();
+                        Transaction[] transactionsForTheClient = validTransactions
+                            .Where(x => x.client_id == currentClient)
+                            .ToArray();
+                        client.clientId = currentClient;
+                        client.totalApprovedCount = transactionsForTheClient
+                            .Where(x => x.status == "approved")
+                            .Count();
 
-                reports.Add(new Report
+                        decimal clientApprovedAmount = transactionsForTheClient
+                            .Where(x => x.status == "approved")
+                            .Sum(x => x.amount);
+                        client.totalApprovedAmount = clientApprovedAmount;
+
+                        client.totalDeclinedCount = transactionsForTheClient
+                            .Where(x => x.status == "declined")
+                            .Count();
+
+                        decimal clientDeclinedAmount = transactionsForTheClient
+                            .Where(x => x.status == "declined")
+                            .Sum(x => x.amount);
+                        client.totalDeclinedAmount = clientDeclinedAmount;
+
+                        client.totalEarningsAmount = ((clientApprovedAmount - clientDeclinedAmount) * (bankFee / 100.0m));
+                        clients[i] = client;
+                        i++;
+                    }
+                    report.clients = clients;
+                }
+                else
                 {
-                    id = config.Id,
-                    fromTime = config.FromTimestamp,
-                    toTime = config.ToTimestamp,
-                    totalApprovedCount = clientReports.Sum(x => x.totalApprovedCount),
-                    totalApprovedAmount = Math.Round(clientReports.Sum(x => x.totalApprovedAmount), 2),
-                    totalDeclinedCount = clientReports.Sum(x => x.totalDeclinedCount),
-                    totalDeclinedAmount = Math.Round(clientReports.Sum(x => x.totalDeclinedAmount), 2),
-                    totalEarningsAmount = Math.Round(clientReports.Sum(x => x.totalEarningsAmount) * feeRate, 2),
-                    clients = clientReports
-                });
+                    report.clients = Array.Empty<Client>();
+                }
+                reports.Add(report);
             }
 
             return reports;
@@ -98,6 +122,11 @@ namespace BankingCompetition.Services
 
             var response = await client.SendAsync(request);
             if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine(response.StatusCode);
+                Console.WriteLine(await response.Content.ReadAsStringAsync());
+            }
+            else
             {
                 Console.WriteLine(response.StatusCode);
                 Console.WriteLine(await response.Content.ReadAsStringAsync());

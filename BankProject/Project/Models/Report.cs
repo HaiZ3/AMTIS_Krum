@@ -34,6 +34,6 @@ namespace Project.Models
         public decimal totalEarningsAmount { get; set; }
 
         [JsonPropertyName("clients")]
-        public List<Client> clients { get; set; }
+        public Client[] clients { get; set; }
     }
 }
