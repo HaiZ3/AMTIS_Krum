@@ -13,10 +13,12 @@ namespace BankingCompetition.Services
         private Dictionary<string, List<Transaction>> _transactionsByCard = new();
         private Dictionary<string, List<Transaction>> _transactionsByClient = new();
         private List<Transaction> _allTransactions = new();
-        private readonly HttpClient _client;
+        private List<Transaction> _allApprovedTransactions = new();
         private SessionInfo SessionInfo;
 
         public List<Transaction> AllTransactions { get => _allTransactions; }
+
+        public List<Transaction> AllApprovedTransactions { get => _allApprovedTransactions; }
         public List<Transaction> TransactionsByClient
         {
             //Get the list from the dictionary _transactionsByClient SelectMany is essential
@@ -25,7 +27,6 @@ namespace BankingCompetition.Services
         public TransactionService(SessionInfo sessionInfo, HttpClient client)
         {
             SessionInfo = sessionInfo;
-            this._client = client;
         }
 
         public List<TransactionResult> ProcessTransactions(Transaction[] transactions)
@@ -47,7 +48,6 @@ namespace BankingCompetition.Services
                 }
                 if (transaction.amount < 0)
                 {
-                    transaction.amount = 0;
                     _allTransactions.Add(transaction);
                     transactionResult = new TransactionResult(transaction);
                     currentTransactionsForTheBatch.Add(transactionResult);
@@ -174,6 +174,7 @@ namespace BankingCompetition.Services
                     _transactionsByClient[transaction.client_id].Add(transaction);
                     transaction.status = "approved";
                     _allTransactions.Add(transaction);
+                    _allApprovedTransactions.Add(transaction);
                     transactionResult = new TransactionResult(transaction);
                     currentTransactionsForTheBatch.Add(transactionResult);
                 }
@@ -205,6 +206,7 @@ namespace BankingCompetition.Services
                     _transactionsByCard[transaction.card_id].Add(transaction);
                     _transactionsByClient[transaction.client_id].Add(transaction);
                     _allTransactions.Add(transaction);
+                    _allApprovedTransactions.Add(transaction);
                     transactionResult = new TransactionResult(transaction);
                     currentTransactionsForTheBatch.Add(transactionResult);
                 }

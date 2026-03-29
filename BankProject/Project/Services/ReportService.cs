@@ -1,7 +1,6 @@
 ﻿using BankingCompetition.Models;
 using Project.Constants;
 using Project.Models;
-using Project.Models.SessionConstraints;
 using System.Text;
 using System.Text.Json;
 
@@ -10,7 +9,6 @@ namespace BankingCompetition.Services
     public class ReportService
     {
         private readonly List<Transaction> _transactions;
-        private readonly HttpClient client = new HttpClient();
 
         public ReportService(List<Transaction> transactions)
         {
@@ -46,24 +44,31 @@ namespace BankingCompetition.Services
                 report.id = config.Id;
                 report.fromTime = config.FromTimestamp;
                 report.toTime = config.ToTimestamp;
-                report.totalApprovedCount = validTransactions
-                    .Where(x => x.status == "approved")
-                    .Count();
 
-                decimal totalApprovedAmount = validTransactions
+                Transaction[] approvedTransactions = validTransactions
                     .Where(x => x.status == "approved")
+                    .ToArray();
+
+                report.totalApprovedCount = approvedTransactions.Length;
+
+                decimal totalApprovedAmount = approvedTransactions
                     .Sum(x => x.amount);
 
-                report.totalDeclinedCount = validTransactions
-                    .Where(x => x.status == "declined")
-                    .Count();
+                report.totalApprovedAmount = Math.Round(totalApprovedAmount, 2);
 
-                decimal totalDeclinedAmount = validTransactions
+                Transaction[] declinedTransactions = validTransactions
                     .Where(x => x.status == "declined")
-                    .Sum(x => x.amount);
-                report.totalDeclinedAmount = totalDeclinedAmount;
+                    .ToArray();
 
-                report.totalEarningsAmount = ((totalApprovedAmount - totalDeclinedAmount) * (bankFee / 100m));
+                report.totalDeclinedCount = declinedTransactions.Length;
+
+                decimal totalDeclinedAmount = declinedTransactions
+                    .Sum(x => Math.Abs(x.amount));
+
+                report.totalDeclinedAmount = Math.Round(totalDeclinedAmount, 2);
+
+                report.totalEarningsAmount = Math.Round(totalApprovedAmount * (bankFee / 100m), 2);
+
                 if (config.ClientIds is not null)
                 {
                     Client[] clients = new Client[config.ClientIds.Length];
@@ -75,25 +80,31 @@ namespace BankingCompetition.Services
                             .Where(x => x.client_id == currentClient)
                             .ToArray();
                         client.clientId = currentClient;
-                        client.totalApprovedCount = transactionsForTheClient
+
+                        Transaction[] approvedClientTransactions = transactionsForTheClient
                             .Where(x => x.status == "approved")
-                            .Count();
+                            .ToArray();
 
-                        decimal clientApprovedAmount = transactionsForTheClient
-                            .Where(x => x.status == "approved")
+                        client.totalApprovedCount = approvedClientTransactions.Length;
+
+                        decimal clientApprovedAmount = approvedClientTransactions
                             .Sum(x => x.amount);
-                        client.totalApprovedAmount = clientApprovedAmount;
 
-                        client.totalDeclinedCount = transactionsForTheClient
+                        client.totalApprovedAmount = Math.Round(clientApprovedAmount, 2);
+
+                        Transaction[] clientDeclinedTransactions = transactionsForTheClient
                             .Where(x => x.status == "declined")
-                            .Count();
+                            .ToArray();
 
-                        decimal clientDeclinedAmount = transactionsForTheClient
-                            .Where(x => x.status == "declined")
-                            .Sum(x => x.amount);
-                        client.totalDeclinedAmount = clientDeclinedAmount;
+                        client.totalDeclinedCount = clientDeclinedTransactions.Length;
 
-                        client.totalEarningsAmount = ((clientApprovedAmount - clientDeclinedAmount) * (bankFee / 100.0m));
+                        decimal clientDeclinedAmount = clientDeclinedTransactions
+                            .Sum(x => Math.Abs(x.amount));
+
+                        client.totalDeclinedAmount = Math.Round(clientDeclinedAmount, 2);
+
+                        client.totalEarningsAmount = Math.Round(clientApprovedAmount * (bankFee / 100.0m), 2);
+
                         clients[i] = client;
                         i++;
                     }
@@ -120,7 +131,7 @@ namespace BankingCompetition.Services
             request.Headers.Add("Competitor-Id", competitorId);
             request.Content = content;
 
-            var response = await client.SendAsync(request);
+            var response = await Values.client.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
                 Console.WriteLine(response.StatusCode);

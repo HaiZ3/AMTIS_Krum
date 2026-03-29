@@ -29,7 +29,7 @@ class Program
             bool sendBatchSuccess = await transactionService.SendBatchResultsAsync(sessionInfo.sessionId, batch.transactionsBatchId, transactionResults);
         }
 
-        ReportService reportService = new ReportService(transactionService.TransactionsByClient);
+        ReportService reportService = new ReportService(transactionService.AllTransactions);
         List<ReportConfiguration> reportConfiguration = await reportService.GetReportConfigurationAsync(sessionInfo.sessionId);
 
         List<Report> reports = reportService.GenerateReports(reportConfiguration, sessionInfo.spendingLimits.interchangeFeePercentage);
